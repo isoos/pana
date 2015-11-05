@@ -20,7 +20,15 @@ class AnalyzerOutput {
   AnalyzerOutput(this.type, this.error, this.file, this.line, this.col);
 
   static AnalyzerOutput parse(String content, {String projectDir}) {
+    if (content.isEmpty) {
+      throw new ArgumentError('Provided content is empty.');
+    }
     var matches = _regexp.allMatches(content).toList();
+
+    if (matches.isEmpty) {
+      throw new ArgumentError(
+          'Provided content does not align with expectations.');
+    }
 
     var match = matches.single;
 

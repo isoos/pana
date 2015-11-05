@@ -125,11 +125,17 @@ Future<List<AnalyzerOutput>> analyze(String projectDir, {bool strong}) async {
     log.warning('Analyzer stdout: $line');
   });
 
-  List<AnalyzerOutput> items;
+  var items = <AnalyzerOutput>[];
+  var errorLines = <String>[];
+
   try {
-    items = await getLines(process.stderr)
-        .map((line) => AnalyzerOutput.parse(line, projectDir: projectDir))
-        .toList();
+    await for (var line in getLines(process.stderr)) {
+      try {
+        items.add(AnalyzerOutput.parse(line, projectDir: projectDir));
+      } on ArgumentError catch (_) {
+        errorLines.add(line);
+      }
+    }
   } finally {
     await stdoutDrain;
   }
@@ -137,7 +143,19 @@ Future<List<AnalyzerOutput>> analyze(String projectDir, {bool strong}) async {
   var code = await process.exitCode;
 
   if (code != 0 && code != 3) {
-    throw "Analyzer failed with exit code $code";
+    var msg = new StringBuffer("Analyzer failed with exit code $code");
+
+    if (errorLines.isNotEmpty) {
+      msg.writeln();
+      msg.writeAll(errorLines, '\n');
+    }
+
+    throw msg.toString();
+  }
+
+  if (errorLines.isEmpty) {
+    log.warning(
+        'Got some parse errors on these lines\n' + errorLines.join('\n'));
   }
 
   return items;
