@@ -40,20 +40,26 @@ Future<Summary> run(String packageName) async {
       client.close();
     }
 
+    List<AnalyzerOutput> items = const <AnalyzerOutput>[];
+
     log.info('Running pub upgrade');
-    var result =
-        await Process.run('pub', ['upgrade'], workingDirectory: tempDir.path);
-    if (result.exitCode != 0) {
-      throw new ProcessException(
-          'pub', ['upgrade'], result.stderr, result.exitCode);
+    var result = await Process.run('pub', ['upgrade', '--verbosity', 'all'],
+        workingDirectory: tempDir.path);
+
+    var pubSummary =
+        new PubSummary(result.exitCode, result.stdout, result.stderr);
+
+    if (pubSummary.exitCode == 0) {
+      log.info('Finished pub upgrade');
+      log.info('Starting analysis');
+      items = await analyze(tempDir.path, strong: true);
+      log.info('Finished analysis');
+    } else {
+      log.severe('pub upgrade failed - exit code ${pubSummary.exitCode}');
+      log.info(pubSummary.stderr);
     }
-    log.info('Finished pub upgrade');
 
-    log.info('Starting analysis');
-    var items = await analyze(tempDir.path, strong: true);
-    log.info('Finished analysis');
-
-    return new Summary(packageName, packageDetails, downloadDate,
+    return new Summary(packageName, packageDetails, downloadDate, pubSummary,
         new List<AnalyzerOutput>.unmodifiable(items));
   } finally {
     tempDir.deleteSync(recursive: true);

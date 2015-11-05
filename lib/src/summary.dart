@@ -6,10 +6,11 @@ class Summary {
   final String packageName;
   final DateTime packageDownloadTime;
   final Map<String, dynamic> packageDetails;
+  final PubSummary pubSummary;
   final List<AnalyzerOutput> results;
 
   Summary(this.packageName, this.packageDetails, this.packageDownloadTime,
-      this.results);
+      this.pubSummary, this.results);
 
   Set<String> get resultTypes =>
       results.fold(new Set<String>(), (Set theSet, AnalyzerOutput item) {
@@ -27,6 +28,21 @@ class Summary {
         'packageName': packageName,
         'packageDownloadTime': packageDownloadTime.toIso8601String(),
         'packageDetails': packageDetails,
+        'pubSummary': pubSummary,
         'results': results
+      };
+}
+
+class PubSummary {
+  final int exitCode;
+  final String stdout;
+  final String stderr;
+
+  PubSummary(this.exitCode, this.stdout, this.stderr);
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'exitCode': exitCode,
+        'stdout': stdout,
+        'stderr': stderr
       };
 }
