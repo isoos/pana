@@ -17,8 +17,7 @@ export 'src/summary.dart';
 Future<Summary> run(String packageName) async {
   log.info('Starting package "$packageName".');
 
-  var tempDir =
-      await Directory.systemTemp.createTemp('pana.$packageName.');
+  var tempDir = await Directory.systemTemp.createTemp('pana.$packageName.');
 
   try {
     var client = new IOClient();
@@ -101,13 +100,21 @@ Future<List<AnalyzerOutput>> analyze(String projectDir, {bool strong}) async {
   // find all dart files in 'lib' directory
   projectDir = new Directory(projectDir).resolveSymbolicLinksSync();
 
-  var libsRelativePaths = await getLibraries(projectDir);
+  var libsRelativePaths =
+      await getDartFilesInDir(projectDir, ['lib', 'bin']).toList();
+
+  if (libsRelativePaths.isEmpty) {
+    return const [];
+  }
 
   var args = <String>['--format', 'machine'];
 
   if (strong == true) {
     args.add('--strong');
   }
+
+  log.info('Analyzing libraries (${libsRelativePaths.length}):\n' +
+      libsRelativePaths.join('\n'));
 
   args.addAll(libsRelativePaths);
 
@@ -136,15 +143,21 @@ Future<List<AnalyzerOutput>> analyze(String projectDir, {bool strong}) async {
   return items;
 }
 
-Future<List<String>> getLibraries(String projectDir) async {
-  var libDir = new Directory(p.join(projectDir, 'lib'));
+Stream<String> getDartFilesInDir(
+    String projectDir, List<String> subDirs) async* {
+  for (var dir in subDirs) {
+    var libDir = new Directory(p.join(projectDir, dir));
 
-  var libFiles = await libDir
-      .list(recursive: false, followLinks: false)
-      .where((fse) =>
-          fse is File && p.extension(fse.path.toLowerCase()) == '.dart')
-      .map((fse) => p.relative(fse.path, from: projectDir))
-      .toList();
+    if (!libDir.existsSync()) {
+      continue;
+    }
 
-  return libFiles;
+    await for (var dartFile in await libDir
+        .list(recursive: false, followLinks: false)
+        .where((fse) =>
+            fse is File && p.extension(fse.path.toLowerCase()) == '.dart')
+        .map((fse) => p.relative(fse.path, from: projectDir))) {
+      yield dartFile;
+    }
+  }
 }
