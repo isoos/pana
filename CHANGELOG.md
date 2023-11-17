@@ -1,6 +1,7 @@
 ## 0.21.43
 
 - Fix: limit number of documentation entries exported in `pub-data.json`.
+- Handle `dart:js_interop_unsafe` imports.
 
 ## 0.21.42
 
