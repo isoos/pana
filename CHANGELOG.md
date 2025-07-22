@@ -2,6 +2,7 @@
 
 - Fix issue with analyzing packages nested inside git repositories on windows.
   https://github.com/dart-lang/pana/issues/1207 
+- Updated `License` with `start` and `end` `Position` fields that identifies the recognized block.
 
 ## 0.22.21
 
