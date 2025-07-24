@@ -1,5 +1,6 @@
 ## 0.22.22
 
+- Deprecated `downloadPackage`, use the new `ToolEnvironment.unpack` instead.
 - Fix issue with analyzing packages nested inside git repositories on windows.
   https://github.com/dart-lang/pana/issues/1207 
 
