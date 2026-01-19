@@ -412,9 +412,16 @@ class ToolEnvironment {
   Future<Map<String, dynamic>> _getFlutterVersion() async {
     final rootPath = _dartSdk.environment['FLUTTER_ROOT'];
     if (rootPath != null) {
-      final versionFile = File(p.join(rootPath, 'version'));
+      final versionFile = File(
+        p.join(rootPath, 'bin', 'cache', 'flutter.version.json'),
+      );
       if (await versionFile.exists()) {
-        return {'flutterVersion': await versionFile.readAsString()};
+        final content = await versionFile.readAsString();
+        return json.decode(content) as Map<String, dynamic>;
+      }
+      final oldVersionFile = File(p.join(rootPath, 'version'));
+      if (await oldVersionFile.exists()) {
+        return {'flutterVersion': await oldVersionFile.readAsString()};
       }
     }
     throw Exception('Flutter rootPath is missing');
