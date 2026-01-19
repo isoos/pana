@@ -47,7 +47,10 @@ class SdkConfig {
     required Map<String, String> environment,
     bool isFlutterSdk = false,
   }) async {
-    final resolvedRootPath = await _resolve(rootPath);
+    final fallbackRootPath = isFlutterSdk
+        ? Platform.environment['FLUTTER_ROOT']
+        : null;
+    final resolvedRootPath = await _resolve(rootPath ?? fallbackRootPath);
     final resolvedConfigHomePath = await _resolve(configHomePath);
     return SdkConfig(
       rootPath: resolvedRootPath,
@@ -224,13 +227,12 @@ class ToolEnvironment {
         'Dart SDK to run `dart analyze` on Flutter packages.',
       );
     }
-
+    final flutterRoot = flutterSdk._config.rootPath;
     final toolEnv = ToolEnvironment._(
       resolvedPubCache,
       await _DartSdk.detect(dartSdkConfig, {
         ...env,
-        if (flutterSdkConfig.rootPath != null)
-          'FLUTTER_ROOT': flutterSdkConfig.rootPath!,
+        if (flutterRoot != null) 'FLUTTER_ROOT': flutterRoot,
       }),
       flutterSdk,
       dartdocVersion,
