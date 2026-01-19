@@ -15,7 +15,6 @@ import 'internal_model.dart';
 import 'logging.dart';
 import 'model.dart' show PanaRuntimeInfo;
 import 'package_analyzer.dart' show InspectOptions;
-import 'tool/flutter_tool.dart';
 import 'tool/run_constrained.dart';
 import 'utils.dart';
 import 'version.dart';
@@ -42,14 +41,6 @@ class SdkConfig {
     this.configHomePath,
     this.environment = const <String, String>{},
   });
-
-  SdkConfig _changeRootPath(String? rootPath) {
-    return SdkConfig(
-      rootPath: rootPath,
-      configHomePath: configHomePath,
-      environment: environment,
-    );
-  }
 
   /// Resolves symbolic links in the specified paths and extends [environment].
   Future<SdkConfig> _resolveAndExtend({
@@ -101,10 +92,7 @@ class ToolEnvironment {
     Map<String, String> environment = const <String, String>{},
     required PanaRuntimeInfo runtimeInfo,
   }) : _dartSdk = _DartSdk._(SdkConfig(environment: environment)),
-       _flutterSdk = _FlutterSdk._(
-         SdkConfig(environment: environment),
-         _DartSdk._(SdkConfig(environment: environment)),
-       ),
+       _flutterSdk = _FlutterSdk._(SdkConfig(environment: environment)),
        _dartdocVersion = null,
        _runtimeInfo = runtimeInfo,
        _useAnalysisIncludes = false,
@@ -230,7 +218,7 @@ class ToolEnvironment {
     // TODO: remove this after flutter analyze gets machine-readable output.
     // https://github.com/flutter/flutter/issues/23664
     final flutterSdk = await _FlutterSdk.detect(flutterSdkConfig, env);
-    if (flutterSdk._dartSdk._config.rootPath == null) {
+    if (flutterSdk._config.rootPath == null) {
       log.warning(
         'Flutter SDK path was not specified, pana will use the default '
         'Dart SDK to run `dart analyze` on Flutter packages.',
@@ -239,7 +227,11 @@ class ToolEnvironment {
 
     final toolEnv = ToolEnvironment._(
       resolvedPubCache,
-      await _DartSdk.detect(dartSdkConfig, env),
+      await _DartSdk.detect(dartSdkConfig, {
+        ...env,
+        if (flutterSdkConfig.rootPath != null)
+          'FLUTTER_ROOT': flutterSdkConfig.rootPath!,
+      }),
       flutterSdk,
       dartdocVersion,
       useAnalysisIncludes ??
@@ -325,13 +317,9 @@ class ToolEnvironment {
     bool usesFlutter, {
     required InspectOptions inspectOptions,
   }) async {
-    final command = usesFlutter
-        ? _flutterSdk.dartAnalyzeCmd
-        : _dartSdk.dartAnalyzeCmd;
-
     return await _withRestrictedAnalysisOptions(packageDir, () async {
       final proc = await _runSandboxed(
-        [...command, '--format', 'machine', dir],
+        [..._dartSdk.dartAnalyzeCmd, '--format', 'machine', dir],
         environment: usesFlutter
             ? _flutterSdk.environment
             : _dartSdk.environment,
@@ -422,13 +410,14 @@ class ToolEnvironment {
   }
 
   Future<Map<String, dynamic>> _getFlutterVersion() async {
-    final result = await _runSandboxed(
-      [..._flutterSdk.flutterCmd, '--version', '--machine'],
-      environment: _flutterSdk.environment,
-      throwOnError: true,
-      writableConfigHome: true,
-    );
-    return result.parseJson(transform: stripIntermittentFlutterMessages);
+    final rootPath = _dartSdk.environment['FLUTTER_ROOT'];
+    if (rootPath != null) {
+      final versionFile = File(p.join(rootPath, 'version'));
+      if (await versionFile.exists()) {
+        return {'flutterVersion': await versionFile.readAsString()};
+      }
+    }
+    throw Exception('Flutter rootPath is missing');
   }
 
   Future<PanaProcessResult> runPub(
@@ -439,7 +428,7 @@ class ToolEnvironment {
     return await _withStripAndAugmentPubspecYaml(packageDir, () async {
       return await _runSandboxed(
         [
-          if (usesFlutter) ..._flutterSdk.pubCmd else ..._dartSdk.pubCmd,
+          ..._dartSdk.pubCmd,
           ...[command, '--no-example'],
         ],
         workingDirectory: packageDir,
@@ -459,7 +448,7 @@ class ToolEnvironment {
     List<String> args = const [],
     required bool usesFlutter,
   }) async {
-    final pubCmd = usesFlutter ? _flutterSdk.pubCmd : _dartSdk.pubCmd;
+    final pubCmd = _dartSdk.pubCmd;
     final cmdLabel = usesFlutter ? 'flutter' : 'dart';
     return await _withStripAndAugmentPubspecYaml(packageDir, () async {
       Future<PanaProcessResult> runPubGet() async {
@@ -553,7 +542,7 @@ class ToolEnvironment {
     required bool usesFlutter,
   }) async {
     final sdkDir = usesFlutter
-        ? _flutterSdk._dartSdk._config.rootPath
+        ? _flutterSdk._config.rootPath
         : _dartSdk._config.rootPath;
 
     final args = [
@@ -569,11 +558,8 @@ class ToolEnvironment {
     ];
 
     if (_dartdocVersion == 'sdk') {
-      final command = usesFlutter
-          ? _flutterSdk._dartSdk.dartCmd
-          : _dartSdk.dartCmd;
       return await _runSandboxed(
-        [...command, 'doc', ...args],
+        [..._dartSdk.dartCmd, 'doc', ...args],
         workingDirectory: packageDir,
         environment: _dartSdk.environment,
         timeout: timeout,
@@ -582,7 +568,7 @@ class ToolEnvironment {
         writablePubCacheDir: true,
       );
     } else {
-      final command = usesFlutter ? _flutterSdk.pubCmd : _dartSdk.pubCmd;
+      final command = _dartSdk.pubCmd;
       if (!_globalDartdocActivated) {
         await _runSandboxed(
           [
@@ -788,14 +774,15 @@ class _DartSdk {
   late final dartAnalyzeCmd = [...dartCmd, 'analyze'];
 
   late final pubCmd = [...dartCmd, 'pub'];
+
+  late final flutterRootEnvVar = environment['FLUTTER_ROOT'];
 }
 
 class _FlutterSdk {
   final SdkConfig _config;
-  final _DartSdk _dartSdk;
   Map<String, String> get environment => _config.environment;
 
-  _FlutterSdk._(this._config, this._dartSdk);
+  _FlutterSdk._(this._config);
 
   static Future<_FlutterSdk> detect(
     SdkConfig config,
@@ -805,28 +792,6 @@ class _FlutterSdk {
       environment: environment,
       isFlutterSdk: true,
     );
-
-    final dartSdkRootPath = resolved.rootPath == null
-        ? null
-        : p.join(resolved.rootPath!, 'bin', 'cache', 'dart-sdk');
-
-    return _FlutterSdk._(
-      resolved,
-      await _DartSdk.detect(
-        config._changeRootPath(dartSdkRootPath),
-        resolved.environment,
-      ),
-    );
+    return _FlutterSdk._(resolved);
   }
-
-  late final flutterCmd = [
-    _join(_config.rootPath, 'bin', 'flutter'),
-    '--no-version-check',
-  ];
-
-  late final pubCmd = [...flutterCmd, 'pub', 'pub'];
-
-  // TODO: remove this after flutter analyze gets machine-readable output.
-  // https://github.com/flutter/flutter/issues/23664
-  late final dartAnalyzeCmd = _dartSdk.dartAnalyzeCmd;
 }
