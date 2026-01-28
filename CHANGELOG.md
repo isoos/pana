@@ -1,3 +1,7 @@
+## 0.23.9
+
+- Better error report on JSON parsing issues (e.g. `pub outdated` subprocess's output).
+
 ## 0.23.8
 
 - Updated option to list of arguments to run precompiled `dartdoc` binary.

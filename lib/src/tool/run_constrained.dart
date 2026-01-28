@@ -254,9 +254,9 @@ class PanaProcessResult {
         : transform(asJoinedOutput);
     try {
       return json.decode(value) as Map<String, dynamic>;
-    } on FormatException catch (_) {
+    } on FormatException catch (e) {
       throw ToolException(
-        'Unable to parse output as JSON:\n\n```\n$asTrimmedOutput\n```\n',
+        'Unable to parse output as JSON: $e\n\n```\n$asJoinedOutput\n```\n',
       );
     }
   }
